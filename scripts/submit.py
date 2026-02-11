@@ -5,7 +5,7 @@ import argparse
 import random
 from pathlib import Path
 
-from core.io import load_graph_json, write_submission_txt, infer_k_from_filename
+from core.io import load_graph_json, write_submission_txt, infer_from_filename
 from core.graph import Graph
 from strategies.base import StrategyContext
 from strategies.baselines import get_strategy
@@ -20,18 +20,25 @@ def main() -> None:
     parser.add_argument("--rounds", default=50, type=int, help="Number of rounds (default: 50).")
     parser.add_argument("--strategy", default="top_degree_random_tie", type=str, help="Strategy name.")
     parser.add_argument("--seed", default=0, type=int, help="RNG seed for reproducibility.")
-    parser.add_argument("--out", required=True, type=str, help="Output submission .txt path.")
+    parser.add_argument("--out-dir", default="submissions", type=str, help="Output directory for submission .txt files.")
+
+    # top_degree stratrgy 
+    parser.add_argument("--top-m", type=float, default=1, help="Top-M pool size ratio for top_degree_random_tie and top_degree_no_repeat. (>=1)")
+
     args = parser.parse_args()
 
     G_nx = load_graph_json(args.graph)
     G = Graph.from_networkx(G_nx)
 
-    strat = get_strategy(args.strategy)
+    if args.strategy == "top_degree_random_tie" or args.strategy == "top_degree_no_repeat":
+        strat = get_strategy(args.strategy, top_m=args.top_m)
+    else:
+        strat = get_strategy(args.strategy)
     rng = random.Random(args.seed)
     ctx = StrategyContext()
 
     # Infer k from filename if not provided
-    k_inferred = infer_k_from_filename(args.graph)
+    competition_style, k_inferred = infer_from_filename(args.graph)
 
     if args.k is not None:
         k = args.k
@@ -52,8 +59,14 @@ def main() -> None:
             raise ValueError(f"Round {r}: expected {k} seeds, got {len(seeds)}")
         G.validate_seeds(seeds)
 
-    write_submission_txt(seeds_by_round, args.out)
-    print(f"Wrote {args.rounds * k} seeds to {Path(args.out).resolve()}")
+    if args.strategy == "top_degree_no_repeat" or args.strategy == "top_degree_random_tie":
+        out_filename = f"{Path(args.graph).stem}/{args.strategy}_topm{args.top_m}_seed{args.seed}.txt"
+    else:
+        out_filename = f"{Path(args.graph).stem}/{args.strategy}_seed{args.seed}.txt"
+    out_path = Path(args.out_dir) / out_filename
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    write_submission_txt(seeds_by_round, out_path)
+    print(f"Wrote {args.rounds * k} seeds to {out_path.resolve()}")
 
 if __name__ == "__main__":
     main()

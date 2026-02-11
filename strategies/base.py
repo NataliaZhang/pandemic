@@ -23,4 +23,4 @@ class Strategy:
         raise NotImplementedError
 
     def select_seeds_50(self, G: Graph, k: int, rng: random.Random, ctx: StrategyContext, rounds: int = 50) -> List[List[int]]:
-        return [self.select_seeds(G, k, rng, ctx) for _ in range(rounds)]
+        raise NotImplementedError

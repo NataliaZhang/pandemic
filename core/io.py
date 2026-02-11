@@ -3,7 +3,7 @@
 import json
 import networkx as nx
 from pathlib import Path
-from typing import List, Union
+from typing import List, Union, Optional, Tuple
 from pathlib import Path
 
 def load_graph_json(path=""):
@@ -57,22 +57,24 @@ def write_submission_txt(
             for s in round_seeds:
                 f.write(f"{int(s)}\n")
 
-def infer_k_from_filename(path: str | Path) -> int | None:
+def infer_from_filename(
+    path: Union[str, Path]
+) -> Tuple[Optional[str], Optional[int]]:
     """
-    Try to infer k from filename like:
+    Try to infer competition style and k from filename like:
     RR.5.10.json
     J.20.31.json
 
     Returns:
-        int if parsed successfully,
-        None otherwise.
+        tuple[str | None, int | None]: competition style and k if parsed successfully,
+        otherwise (None, None).
     """
     name = Path(path).stem  # remove .json
     parts = name.split(".")
 
     if len(parts) >= 2:
         try:
-            return int(parts[1])
+            return parts[0], int(parts[1])
         except ValueError:
-            return None
-    return None
+            return None, None
+    return None, None
