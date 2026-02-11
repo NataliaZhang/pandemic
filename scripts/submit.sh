@@ -1,5 +1,5 @@
 python -m scripts.submit \
-  --graph sample_graphs/sample_graphs/RR.5.1.json \
+  --graph graphs/RR.5.1.json \
   --strategy top_degree_no_repeat \
-  --top-m 1 \
+  --top-m 1.2 \
   --seed 0 

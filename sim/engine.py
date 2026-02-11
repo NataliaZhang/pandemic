@@ -65,7 +65,7 @@ def simulate(
 
         generation += 1
 
-    # final snapshot (optional, so animation ends at fixed point)
+    # final snapshot
     if record_history and history is not None:
         history.append(colors[:])
 
