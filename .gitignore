@@ -1,0 +1,11 @@
+# python
+.DS_Store
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# output
+*.txt
+sample_graphs/
