@@ -6,6 +6,11 @@ import random
 from core.graph import Graph
 from strategies.base import Strategy, StrategyContext
 
+from strategies.edge import (
+    ClusterBoundaryTakeoverSpectral,
+    ClusterTopDegreeProportionalSpectral,
+)
+
 def get_strategy(name: str, **kwargs) -> Strategy:
     name = name.strip().lower()
     if name in {"random_k"}:
@@ -14,7 +19,10 @@ def get_strategy(name: str, **kwargs) -> Strategy:
         return TopDegreeRandomTie(**kwargs)
     if name in {"top_degree_no_repeat"}:
         return TopDegreeNoRepeat(**kwargs)
-    # TODO: add more baselines like degree discount, greedy, etc.
+    if name in {"cluster_boundary_takeover_spectral", "edge_cluster"}:
+        return ClusterBoundaryTakeoverSpectral(**kwargs)
+    if name in {"cluster_top_degree_proportional_spectral", "degree_cluster"}:
+        return ClusterTopDegreeProportionalSpectral(**kwargs)
     raise ValueError(f"Unknown strategy: {name}")
 
 class RandomK(Strategy):
