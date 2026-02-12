@@ -26,51 +26,19 @@ def _select_seeds_50_unique(
 ) -> List[List[int]]:
     seen_exact: Set[FrozenSet[int]] = set()
     out: List[List[int]] = []
-
-    def jaccard(a: Set[int], b: Set[int]) -> float:
-        if not a and not b:
-            return 1.0
-        return len(a & b) / len(a | b)
-
-    for r in range(rounds):
-        # derive a round-specific RNG so we get different tie-breaks / sampling
-        rrng = random.Random(rng.randrange(1 << 30))
-
-        best_candidate = None
-
+    seen: Set[FrozenSet[int]] = set()
+    out: List[List[int]] = []
+    
+    for _ in range(rounds):
         for _attempt in range(max_attempts):
-            # pass rrng through
-            seeds = strategy.select_seeds(G, k, rrng, ctx)
+            seeds = strategy.select_seeds(G, k, rng, ctx)
             key = frozenset(seeds)
-
-            # reject exact repeats
-            if key in seen_exact:
-                continue
-
-            # reject "too similar" sets (optional but helpful)
-            S = set(seeds)
-            too_similar = False
-            for prev in out:
-                if jaccard(S, set(prev)) > max_jaccard:
-                    too_similar = True
-                    break
-            if too_similar:
-                # keep as fallback in case we can't find better
-                if best_candidate is None:
-                    best_candidate = seeds
-                continue
-
-            # accept
-            seen_exact.add(key)
-            out.append(seeds)
-            break
+            if key not in seen:
+                seen.add(key)
+                out.append(seeds)
+                break
         else:
-            # couldn't find a distinct/diverse one: accept best available or just call once
-            if best_candidate is None:
-                best_candidate = strategy.select_seeds(G, k, rrng, ctx)
-            out.append(best_candidate)
-            seen_exact.add(frozenset(best_candidate))
-
+            out.append(strategy.select_seeds(G, k, rng, ctx))
     return out
 
 def _spectral_clusters_sorted_fiedler(
