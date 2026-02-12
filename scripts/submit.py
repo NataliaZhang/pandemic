@@ -6,7 +6,7 @@ import random
 from pathlib import Path
 
 from core.io import load_graph_json, write_submission_txt, infer_from_filename
-from core.graph import Graph
+from core.graph import Graph, wrap_graph
 from strategies.base import StrategyContext
 from strategies.baselines import get_strategy
 
@@ -28,7 +28,7 @@ def main() -> None:
     args = parser.parse_args()
 
     G_nx = load_graph_json(args.graph)
-    G = Graph.from_networkx(G_nx)
+    G = wrap_graph(G_nx, args.graph)
 
     if args.strategy == "top_degree_random_tie" or args.strategy == "top_degree_no_repeat":
         strat = get_strategy(args.strategy, top_m=args.top_m)
@@ -38,7 +38,7 @@ def main() -> None:
     ctx = StrategyContext()
 
     # Infer k from filename if not provided
-    competition_style, k_inferred = infer_from_filename(args.graph)
+    competition_style, k_inferred, family = infer_from_filename(args.graph)
 
     if args.k is not None:
         k = args.k

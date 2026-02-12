@@ -6,7 +6,16 @@ from pathlib import Path
 from typing import List, Union, Optional, Tuple
 from pathlib import Path
 
-def load_graph_json(path=""):
+# Graph family labels
+GRAPH_ER = "ER"
+GRAPH_PA = "PA"
+GRAPH_SSBM = "SSBM"
+GRAPH_CALTECH = "Caltech"
+GRAPH_SNAP = "SNAP"
+
+GRAPH_UNKNOWN = None
+
+def load_graph_json(path: Union[str, Path]) -> nx.Graph:
     """
     Load an undirected graph from the project JSON format.
 
@@ -57,24 +66,57 @@ def write_submission_txt(
             for s in round_seeds:
                 f.write(f"{int(s)}\n")
 
+def _infer_family(comp: str, unique_id: int) -> Optional[str]:
+    if comp == "RR":
+        if 10 <= unique_id <= 17:
+            return GRAPH_ER
+        if 20 <= unique_id <= 27:
+            return GRAPH_PA
+        if 30 <= unique_id <= 37:
+            return GRAPH_SSBM
+        if 40 <= unique_id <= 47:
+            return GRAPH_CALTECH
+        if 50 <= unique_id <= 57:
+            return GRAPH_SNAP
+        return GRAPH_UNKNOWN
+
+    if comp == "J":
+        if 10 <= unique_id <= 15:
+            return GRAPH_SSBM
+        if 20 <= unique_id <= 25:
+            return GRAPH_CALTECH
+        if 30 <= unique_id <= 35:
+            return GRAPH_SNAP
+        return GRAPH_UNKNOWN
+
+    return GRAPH_UNKNOWN
+
 def infer_from_filename(
     path: Union[str, Path]
-) -> Tuple[Optional[str], Optional[int]]:
+) -> Tuple[Optional[str], Optional[int], Optional[str]]:
     """
-    Try to infer competition style and k from filename like:
-    RR.5.10.json
-    J.20.31.json
+    Parse filename like:
+      RR.5.10.json
+      J.20.31.json
 
     Returns:
-        tuple[str | None, int | None]: competition style and k if parsed successfully,
-        otherwise (None, None).
+      (style, k, family)
+
+    If parsing fails:
+      (None, None, None)
     """
     name = Path(path).stem  # remove .json
     parts = name.split(".")
 
-    if len(parts) >= 2:
-        try:
-            return parts[0], int(parts[1])
-        except ValueError:
-            return None, None
-    return None, None
+    if len(parts) < 3:
+        return None, None, None
+
+    comp = parts[0].strip()
+    try:
+        k = int(parts[1])
+        unique_id = int(parts[2])
+    except ValueError:
+        return None, None, None
+
+    family = _infer_family(comp, unique_id)
+    return comp, k, family

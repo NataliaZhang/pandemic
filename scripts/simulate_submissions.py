@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple
 import random
 
 from core.io import load_graph_json, infer_from_filename
-from core.graph import Graph
+from core.graph import Graph, wrap_graph
 from sim.engine import simulate
 
 
@@ -74,7 +74,7 @@ def main() -> None:
         raise ValueError("Could not infer graph path; please pass --graph explicitly.")
 
     # Infer k from filename unless user overrides
-    comp, k_inferred = infer_from_filename(graph_path)
+    comp, k_inferred, family = infer_from_filename(graph_path)
     if args.k is not None:
         k = args.k
         if k_inferred is not None and k != k_inferred:
@@ -90,7 +90,7 @@ def main() -> None:
 
     # Load graph
     G_nx = load_graph_json(graph_path)
-    G = Graph.from_networkx(G_nx)
+    G = wrap_graph(G_nx, graph_path)
 
     # Read submissions
     seeds1 = read_submission_txt(args.sub1, k=k, rounds=args.rounds)
