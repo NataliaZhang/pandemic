@@ -34,16 +34,25 @@ def infer_graph_path_from_submission(sub_path: str) -> Optional[str]:
         submissions/RR.5.1/top_degree_no_repeat_seed0.txt
         Expect structure: submissions/<graph_name>/<file.txt>
 
-    Return:
-        graphs/RR.5.1.json
+    Prefer return:
+        graphs/<graph_name>.json
+    If not exists:
+        graphs/gen/<graph_name>.json
     """
     p = Path(sub_path)
-    if p.parent is None:
-        return None
-    graph_name = p.parent.name
+    graph_name = p.parent.name if p.parent else None
     if not graph_name:
         return None
-    return str(Path("graphs") / f"{graph_name}.json")
+    
+    cand1 = Path("graphs") / f"{graph_name}.json"
+    if cand1.exists():
+        return str(cand1)
+    cand2 = Path("graphs/gen") / f"{graph_name}.json"
+    if cand2.exists():
+        return str(cand2)
+    
+    print(f"[Warn] Could not infer graph path from submission {sub_path}. Checked {cand1} and {cand2}.")
+    return None
 
 
 def main() -> None:
@@ -53,12 +62,7 @@ def main() -> None:
     parser.add_argument("--graph", default=None, type=str, help="Graph JSON path (optional; inferred if omitted).")
     parser.add_argument("--rounds", default=50, type=int, help="Number of rounds (default: 50).")
     parser.add_argument("--k", default=None, type=int, help="Seeds per round (optional; inferred from filename).")
-    parser.add_argument(
-        "--seed",
-        default=0,
-        type=int,
-        help="RNG seed to drive TA-style random max-iteration cap inside simulate().",
-    )
+    parser.add_argument("--seed", default=0, type=int, help="RNG seed to drive random max-iteration cap inside simulate.")
     args = parser.parse_args()
 
     # Graph path inference
@@ -128,13 +132,15 @@ def main() -> None:
             ties += 1
 
         # print(f"Round {r+1:02d}: team0={s1:4d} team1={s2:4d}  gens={res.num_generations}")
-
+    winner = "team0" if team1_wins > team2_wins else ("team1" if team2_wins > team1_wins else "tie")
+    if winner == "tie":
+        winner = "team0" if total1 > total2 else ("team1")
     print("\n=== Summary ===")
     print(f"Graph: {graph_path}")
     print(f"k={k}, rounds={args.rounds}")
     print(f"Totals (sum of per-round node counts): team0={total1}, team1={total2}")
     print(f"Round wins: team0={team1_wins}, team1={team2_wins}, ties={ties}")
-
+    print(f"Overall winner: {winner}")
 
 if __name__ == "__main__":
     main()

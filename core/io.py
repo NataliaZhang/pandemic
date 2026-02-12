@@ -49,6 +49,24 @@ def load_graph_json(path: Union[str, Path]) -> nx.Graph:
 
     return G
 
+def save_graph_json(G: nx.Graph, out_path: Union[str, Path]) -> None:
+    """
+    Save a networkx undirected graph to the project JSON adjacency list format.
+    Ensures nodes are 0..n-1 by relabeling if needed.
+    """
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Relabel to 0..n-1 (deterministic)
+    nodes = sorted(G.nodes())
+    mapping = {old: i for i, old in enumerate(nodes)}
+    G2 = nx.relabel_nodes(G, mapping, copy=True)
+
+    adj = {str(u): [int(v) for v in G2.neighbors(u)] for u in sorted(G2.nodes())}
+
+    with out_path.open("w", encoding="utf-8") as f:
+        json.dump(adj, f)
+
 def write_submission_txt(
     seeds_by_round: List[List[int]],
     out_path: Union[str, Path]
@@ -91,13 +109,30 @@ def _infer_family(comp: str, unique_id: int) -> Optional[str]:
 
     return GRAPH_UNKNOWN
 
+def _infer_family_from_generated_name(stem: str) -> Optional[str]:
+    up = stem.upper()
+    if up.startswith("ER_"):
+        return GRAPH_ER
+    if up.startswith("PA_"):
+        return GRAPH_PA
+    if up.startswith("SSBM_"):
+        return GRAPH_SSBM
+    if up.startswith("CALTECH_"):
+        return GRAPH_CALTECH
+    if up.startswith("SNAP_"):
+        return GRAPH_SNAP
+    return GRAPH_UNKNOWN
+
 def infer_from_filename(
     path: Union[str, Path]
 ) -> Tuple[Optional[str], Optional[int], Optional[str]]:
     """
-    Parse filename like:
-      RR.5.10.json
-      J.20.31.json
+    Competition graphs:
+      RR.5.10.json -> ("RR", 5, "ER")
+      J.20.31.json -> ("J", 20, "SSBM")
+    
+    Generated graphs:
+      ER_n1000_p0.01_seed0.json -> (None, None, "ER")
 
     Returns:
       (style, k, family)
@@ -108,15 +143,19 @@ def infer_from_filename(
     name = Path(path).stem  # remove .json
     parts = name.split(".")
 
-    if len(parts) < 3:
-        return None, None, None
+    if len(parts) >= 3:
+        # competition graph style: COMP.k.UNIQUEID.json
+        comp = parts[0].strip()
+        try:
+            k = int(parts[1])
+            unique_id = int(parts[2])
+        except ValueError:
+            return None, None, None
 
-    comp = parts[0].strip()
-    try:
-        k = int(parts[1])
-        unique_id = int(parts[2])
-    except ValueError:
-        return None, None, None
-
-    family = _infer_family(comp, unique_id)
-    return comp, k, family
+        family = _infer_family(comp, unique_id)
+        return comp, k, family
+    
+    fam = _infer_family_from_generated_name(name)
+    if fam is not None:
+        return None, None, fam
+    return None, None, None

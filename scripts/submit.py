@@ -28,7 +28,7 @@ def main() -> None:
     args = parser.parse_args()
 
     G_nx = load_graph_json(args.graph)
-    G = wrap_graph(G_nx, args.graph)
+    G = wrap_graph(G_nx, args.graph)    # metadata has been inferred here: comp, k, family
 
     if args.strategy == "top_degree_random_tie" or args.strategy == "top_degree_no_repeat":
         strat = get_strategy(args.strategy, top_m=args.top_m)
@@ -37,26 +37,34 @@ def main() -> None:
     rng = random.Random(args.seed)
     ctx = StrategyContext()
 
-    # Infer k from filename if not provided
-    competition_style, k_inferred, family = infer_from_filename(args.graph)
+    is_generated = G.family is not None and G.comp is None
 
-    if args.k is not None:
-        k = args.k
-        if k_inferred is not None and k != k_inferred:
-            print(f"Warning: Provided k={k} differs from inferred k={k_inferred} from filename.")
-    elif k_inferred is not None:
-        k = k_inferred
-        print(f"Inferred k={k} from filename.")
+    if is_generated:
+        # Test mode: do not infer k from filename
+        if args.k is None:
+            G = wrap_graph(G_nx, args.graph, meta_override={"k": 5})
+            print(f"Generated graph detected. Using default k={G.k}.")
+        else:
+            G = wrap_graph(G_nx, args.graph, meta_override={"k": args.k})
     else:
-        k = 5  # default fallback
-        print(f"Could not infer k from filename. Using default k={k}.")
+        # Competition mode: infer k, allow override
+        if args.k is not None:
+            if G.k is not None and args.k != G.k:
+                print(f"Warning: Provided k={args.k} differs from inferred k={G.k} from filename.")
+            G = wrap_graph(G_nx, args.graph, meta_override={"k": args.k})  # override for validation
+        elif G.k is not None:
+            k = G.k
+            print(f"Inferred k={k} from filename.")
+        else:
+            G = wrap_graph(G_nx, args.graph, meta_override={"k": 5})  # default fallback
+            print(f"Could not infer k from filename. Using default k={G.k}.")
 
-    seeds_by_round = strat.select_seeds_50(G, k, rng, ctx, rounds=args.rounds)
+    seeds_by_round = strat.select_seeds_50(G, G.k, rng, ctx, rounds=args.rounds)
 
     # Basic validation
     for r, seeds in enumerate(seeds_by_round):
-        if len(seeds) != k:
-            raise ValueError(f"Round {r}: expected {k} seeds, got {len(seeds)}")
+        if len(seeds) != G.k:
+            raise ValueError(f"Round {r}: expected {G.k} seeds, got {len(seeds)}")
         G.validate_seeds(seeds)
 
     if args.strategy == "top_degree_no_repeat" or args.strategy == "top_degree_random_tie":
@@ -66,7 +74,7 @@ def main() -> None:
     out_path = Path(args.out_dir) / out_filename
     out_path.parent.mkdir(parents=True, exist_ok=True)
     write_submission_txt(seeds_by_round, out_path)
-    print(f"Wrote {args.rounds * k} seeds to {out_path.resolve()}")
+    print(f"Wrote {args.rounds * G.k} seeds to {out_path.resolve()}")
 
 if __name__ == "__main__":
     main()

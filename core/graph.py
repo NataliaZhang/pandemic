@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import networkx as nx
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence, Optional, Union
+from typing import Iterable, List, Sequence, Optional, Union, Dict, Any
 from pathlib import Path
 
 from core.io import infer_from_filename
@@ -42,9 +42,17 @@ class Graph:
             if not (0 <= int(s) < self.n):
                 raise ValueError(f"Seed out of range: {s} (n={self.n})")
 
-def wrap_graph(G_nx:nx.Graph, sourse_path: Union[str, Path]) -> Graph:
+def wrap_graph(
+        G_nx:nx.Graph, 
+        sourse_path: Union[str, Path],
+        meta_override: Optional[Dict[str, Any]] = None
+    ) -> Graph:
     """
     Convert a networkx graph to our Graph format, inferring metadata from the source path.
     """
     comp, k, family = infer_from_filename(sourse_path)
+    if meta_override is not None:
+        comp = meta_override.get("comp", comp)
+        k = meta_override.get("k", k)
+        family = meta_override.get("family", family)
     return Graph.from_networkx(G_nx, comp=comp, k=k, family=family)
