@@ -5,7 +5,6 @@ import random
 
 from core.graph import Graph
 from strategies.base import Strategy, StrategyContext
-
 from strategies.cluster import (
     ClusterBoundaryTakeoverSpectral,
     ClusterTopDegreeProportionalSpectral,

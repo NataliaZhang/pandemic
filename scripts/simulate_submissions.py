@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import random
 
 from core.io import load_graph_json, infer_from_filename
-from core.graph import Graph, wrap_graph
+from core.graph import wrap_graph
 from sim.engine import simulate
 
 
@@ -28,52 +28,77 @@ def read_submission_txt(path: str, k: int, rounds: int = 50) -> List[List[int]]:
         out.append(nums[r * k : (r + 1) * k])
     return out
 
+
 def infer_graph_path_from_submission(sub_path: str) -> Optional[str]:
     """
-    Given submission path like:
-        submissions/RR.5.1/top_degree_no_repeat_seed0.txt
-        Expect structure: submissions/<graph_name>/<file.txt>
+    submissions/<graph_name>/<file>.txt
 
-    Prefer return:
-        graphs/<graph_name>.json
+    Prefer:
+      graphs/<graph_name>.json
     If not exists:
-        graphs/gen/<graph_name>.json
+      graphs/gen/<graph_name>.json
     """
     p = Path(sub_path)
     graph_name = p.parent.name if p.parent else None
     if not graph_name:
         return None
-    
+
     cand1 = Path("graphs") / f"{graph_name}.json"
     if cand1.exists():
         return str(cand1)
+
     cand2 = Path("graphs/gen") / f"{graph_name}.json"
     if cand2.exists():
         return str(cand2)
-    
+
     print(f"[Warn] Could not infer graph path from submission {sub_path}. Checked {cand1} and {cand2}.")
     return None
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Simulate two submissions on the same graph (50 rounds).")
+    parser = argparse.ArgumentParser(
+        description="Simulate 2-5 submissions competing on the same graph (50 rounds)."
+    )
+
     parser.add_argument("--sub1", required=True, type=str, help="Submission txt for team 0.")
     parser.add_argument("--sub2", required=True, type=str, help="Submission txt for team 1.")
+    parser.add_argument("--sub3", default=None, type=str, help="Submission txt for team 2 (optional).")
+    parser.add_argument("--sub4", default=None, type=str, help="Submission txt for team 3 (optional).")
+    parser.add_argument("--sub5", default=None, type=str, help="Submission txt for team 4 (optional).")
+    parser.add_argument("--sub6", default=None, type=str, help="Submission txt for team 5 (optional).")
+
     parser.add_argument("--graph", default=None, type=str, help="Graph JSON path (optional; inferred if omitted).")
     parser.add_argument("--rounds", default=50, type=int, help="Number of rounds (default: 50).")
     parser.add_argument("--k", default=None, type=int, help="Seeds per round (optional; inferred from filename).")
-    parser.add_argument("--seed", default=0, type=int, help="RNG seed to drive random max-iteration cap inside simulate.")
+    parser.add_argument("--seed", default=0, type=int, help="RNG seed for random cap inside simulate().")
     args = parser.parse_args()
 
-    # Graph path inference
+    # Gather submissions (2..6)
+    subs = [args.sub1, args.sub2]
+    for s in [args.sub3, args.sub4, args.sub5, args.sub6]:
+        if s is not None and str(s).strip() != "":
+            subs.append(s)
+
+    if len(subs) < 2:
+        raise ValueError("Need at least 2 submissions.")
+    if len(subs) > 6:
+        raise ValueError("Allow at most 6 submissions.")
+
+    # Infer graph path
     graph_path = args.graph
     if graph_path is None:
-        graph_path_1 = infer_graph_path_from_submission(args.sub1) 
-        graph_path_2 = infer_graph_path_from_submission(args.sub2)
-        if graph_path_1 == graph_path_2:
-            graph_path = graph_path_1
+        inferred_paths = [infer_graph_path_from_submission(s) for s in subs]
+        inferred_paths = [p for p in inferred_paths if p is not None]
+        if not inferred_paths:
+            graph_path = None
         else:
-            print(f"[Warn] Inferred graph paths differ: {graph_path_1} vs {graph_path_2}. Please specify --graph explicitly.")
+            # all must match
+            if len(set(inferred_paths)) == 1:
+                graph_path = inferred_paths[0]
+            else:
+                print(f"[Warn] Inferred graph paths differ across submissions: {sorted(set(inferred_paths))}")
+                graph_path = None
+
     if graph_path is None:
         raise ValueError("Could not infer graph path; please pass --graph explicitly.")
 
@@ -82,9 +107,7 @@ def main() -> None:
     if args.k is not None:
         k = args.k
         if k_inferred is not None and k != k_inferred:
-            print(
-                f"[Warn] --k={k} differs from inferred k={k_inferred} from {Path(graph_path).name}. Using --k."
-            )
+            print(f"[Warn] --k={k} differs from inferred k={k_inferred} from {Path(graph_path).name}. Using --k.")
     else:
         k = k_inferred if k_inferred is not None else 5
         if k_inferred is None:
@@ -96,51 +119,58 @@ def main() -> None:
     G_nx = load_graph_json(graph_path)
     G = wrap_graph(G_nx, graph_path)
 
-    # Read submissions
-    seeds1 = read_submission_txt(args.sub1, k=k, rounds=args.rounds)
-    seeds2 = read_submission_txt(args.sub2, k=k, rounds=args.rounds)
+    # Read seeds for each team: seeds_by_team[team][round] = [k seeds]
+    seeds_by_team: List[List[List[int]]] = []
+    for s in subs:
+        seeds_by_team.append(read_submission_txt(s, k=k, rounds=args.rounds))
 
-    # Validate seeds (in-range, unique within a round)
-    for r in range(args.rounds):
-        G.validate_seeds(seeds1[r])
-        G.validate_seeds(seeds2[r])
+    # Validate seeds
+    for t in range(len(subs)):
+        for r in range(args.rounds):
+            G.validate_seeds(seeds_by_team[t][r])
 
     rng = random.Random(args.seed)
 
-    team1_wins = 0
-    team2_wins = 0
-    ties = 0
-    total1 = 0
-    total2 = 0
+    T = len(subs)
+    totals = [0] * T
+    round_wins = [0] * T
+    tie_rounds = 0
 
     for r in range(args.rounds):
-        res = simulate(
-            G,
-            seeds_by_team=[seeds1[r], seeds2[r]],
-            record_history=False,
-            rng=rng,  # important: drives the TA-style randint cap per round
-        )
-        s1, s2 = res.scores[0], res.scores[1]
-        total1 += s1
-        total2 += s2
+        seeds_this_round = [seeds_by_team[t][r] for t in range(T)]
+        res = simulate(G, seeds_by_team=seeds_this_round, record_history=False, rng=rng)
 
-        if s1 > s2:
-            team1_wins += 1
-        elif s2 > s1:
-            team2_wins += 1
+        # accumulate scores
+        for t in range(T):
+            totals[t] += res.scores[t]
+
+        # determine round winner(s)
+        max_score = max(res.scores)
+        winners = [t for t, sc in enumerate(res.scores) if sc == max_score]
+        if len(winners) == 1:
+            round_wins[winners[0]] += 1
         else:
-            ties += 1
+            tie_rounds += 1
 
-        # print(f"Round {r+1:02d}: team0={s1:4d} team1={s2:4d}  gens={res.num_generations}")
-    winner = "team0" if team1_wins > team2_wins else ("team1" if team2_wins > team1_wins else "tie")
-    if winner == "tie":
-        winner = "team0" if total1 > total2 else ("team1")
+    # overall winner: most round wins, break ties by totals
+    max_round_wins = max(round_wins)
+    best = [t for t in range(T) if round_wins[t] == max_round_wins]
+    if len(best) == 1:
+        overall = best[0]
+    else:
+        max_total = max(totals[t] for t in best)
+        best2 = [t for t in best if totals[t] == max_total]
+        overall = best2[0]  # deterministic pick
+
     print("\n=== Summary ===")
     print(f"Graph: {graph_path}")
+    print(f"Teams: {T}")
     print(f"k={k}, rounds={args.rounds}")
-    print(f"Totals (sum of per-round node counts): team0={total1}, team1={total2}")
-    print(f"Round wins: team0={team1_wins}, team1={team2_wins}, ties={ties}")
-    print(f"Overall winner: {winner}")
+    for t in range(T):
+        print(f"team{t}: total={totals[t]}  round_wins={round_wins[t]}  sub={subs[t]}")
+    print(f"tie_rounds={tie_rounds}")
+    print(f"Overall winner: team{overall}")
+
 
 if __name__ == "__main__":
     main()
