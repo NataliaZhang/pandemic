@@ -6,7 +6,7 @@ import random
 from core.graph import Graph
 from strategies.base import Strategy, StrategyContext
 
-from strategies.edge import (
+from pandemic.strategies.cluster import (
     ClusterBoundaryTakeoverSpectral,
     ClusterTopDegreeProportionalSpectral,
 )
