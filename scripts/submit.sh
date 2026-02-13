@@ -2,39 +2,45 @@
 
 # top degree random tie strategy
 python3 -m scripts.submit \
-  --graph graphs/J.10.30.json \
+  --graph graphs/J.20.31.json \
   --strategy top_degree_random_tie \
   --top-m 1.0 \
   --seed 2 
 
 python3 -m scripts.submit \
-  --graph graphs/J.10.30.json \
+  --graph graphs/J.20.31.json \
   --strategy top_degree_random_tie \
   --top-m 3.0 \
   --seed 2
 
 python3 -m scripts.submit \
-  --graph graphs/J.10.30.json \
-  --strategy top_degree_random_tie \
-  --top-m 5.0 \
+  --graph graphs/J.20.31.json \
+  --strategy top_degree_avoid \
+  --top-m 3.0 \
   --seed 2
 
 python3 -m scripts.submit \
-  --graph graphs/J.10.30.json \
+  --graph graphs/J.20.31.json \
+  --strategy top_degree_avoid \
+  --top-m 4.0 \
+  --seed 2
+
+python3 -m scripts.submit \
+  --graph graphs/J.20.31.json \
   --strategy random_k \
   --seed 2
 
-# degree cluster strategy
-python3 -m scripts.submit \
-  --graph graphs/J.10.30.json \
-  --strategy degree_cluster \
-  --seed 2 
+# # degree cluster strategy
+# python3 -m scripts.submit \
+#   --graph graphs/J.20.31.json \
+#   --strategy degree_cluster \
+#   --seed 2 
 
-# edge cluster strategy
-python3 -m scripts.submit \
-  --graph graphs/J.10.30.json \
-  --strategy edge_cluster \
-  --seed 2 
+# # edge cluster strategy
+# python3 -m scripts.submit \
+#   --graph graphs/J.20.31.json \
+#   --strategy edge_cluster \
+#   --seed 2 
 
 # # for testing on generated graphs
 # python3 -m scripts.submit \

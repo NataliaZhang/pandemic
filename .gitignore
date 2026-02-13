@@ -10,4 +10,4 @@ __pycache__/
 *.txt
 sample_graphs/
 submissions/
-graphs/gen/
+graphs/

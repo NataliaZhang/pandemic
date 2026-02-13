@@ -16,8 +16,8 @@ def get_strategy(name: str, **kwargs) -> Strategy:
         return RandomK()
     if name in {"top_degree_random_tie"}:
         return TopDegreeRandomTie(**kwargs)
-    if name in {"top_degree_no_repeat"}:
-        return TopDegreeNoRepeat(**kwargs)
+    if name in {"top_degree_avoid"}:
+        return TopDegreeAvoid(**kwargs)
     if name in {"cluster_boundary_takeover_spectral", "edge_cluster"}:
         return ClusterBoundaryTakeoverSpectral(**kwargs)
     if name in {"cluster_top_degree_proportional_spectral", "degree_cluster"}:
@@ -55,14 +55,23 @@ class TopDegreeRandomTie(Strategy):
         return rng.sample(pool, k)
 
     
-class TopDegreeNoRepeat(Strategy):
+class TopDegreeAvoid(Strategy):
     """
-
+    Simliar to TopDegreeRandom Tie, but avoid the first k degree nodes.
     """
-    name = "top_degree_no_repeat"
+    name = "top_degree_avoid"
     def __init__(self, top_m):
+        # top_m >= 2
         self.top_m = top_m
 
     def select_seeds(self, G: Graph, k: int, rng: random.Random, ctx: StrategyContext) -> List[int]:
-        raise NotImplementedError("This strategy has not been implemented yet.")
+        if k > G.n:
+            raise ValueError(f"k={k} > n={G.n}")
+        m = min(G.n, max(k, int(self.top_m * k)))
+        # indices of nodes sorted by degree desc
+        nodes_sorted = sorted(range(G.n), key=lambda u: G.degrees[u], reverse=True)
+        pool = nodes_sorted[k:m]
+        if k > len(pool):
+            return pool[:]  # fallback
+        return rng.sample(pool, k)
       

@@ -23,14 +23,14 @@ def main() -> None:
     parser.add_argument("--out-dir", default="submissions", type=str, help="Output directory for submission .txt files.")
 
     # top_degree stratrgy 
-    parser.add_argument("--top-m", type=float, default=1, help="Top-M pool size ratio for top_degree_random_tie and top_degree_no_repeat. (>=1)")
+    parser.add_argument("--top-m", type=float, default=1, help="Top-M pool size ratio for top_degree_random_tie and top_degree_avoid. (>=1)")
 
     args = parser.parse_args()
 
     G_nx = load_graph_json(args.graph)
     G = wrap_graph(G_nx, args.graph)    # metadata has been inferred here: comp, k, family
 
-    if args.strategy == "top_degree_random_tie" or args.strategy == "top_degree_no_repeat":
+    if args.strategy == "top_degree_random_tie" or args.strategy == "top_degree_avoid":
         strat = get_strategy(args.strategy, top_m=args.top_m)
     else:
         strat = get_strategy(args.strategy)
@@ -67,7 +67,7 @@ def main() -> None:
             raise ValueError(f"Round {r}: expected {G.k} seeds, got {len(seeds)}")
         G.validate_seeds(seeds)
 
-    if args.strategy == "top_degree_no_repeat" or args.strategy == "top_degree_random_tie":
+    if args.strategy == "top_degree_avoid" or args.strategy == "top_degree_random_tie":
         out_filename = f"{Path(args.graph).stem}/{args.strategy}_topm{args.top_m}_seed{args.seed}.txt"
     else:
         out_filename = f"{Path(args.graph).stem}/{args.strategy}_seed{args.seed}.txt"
