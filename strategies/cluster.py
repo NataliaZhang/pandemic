@@ -8,6 +8,7 @@ from core.graph import Graph
 from strategies.base import Strategy, StrategyContext
 
 from typing import List, Set, FrozenSet
+from collections import deque
 
 # max_clusters should be somehow related to k and number of rounds
 # select_seeds_50 is unsure I just used method Natalia wrote in baseline 
@@ -220,6 +221,35 @@ def _allocate_budget_proportional(sizes: List[int], k: int) -> List[int]:
     return alloc
 
 
+def _within_distance_of_any(
+    G: Graph,
+    src: int,
+    targets: Set[int],
+    max_dist: int,
+) -> bool:
+    """Return True if src is within graph distance <= max_dist of any node in targets."""
+    if max_dist <= 0 or not targets:
+        return False
+    if src in targets:
+        return True
+
+    q: Deque[Tuple[int, int]] = deque()
+    q.append((src, 0))
+    seen = {src}
+
+    while q:
+        u, d = q.popleft()
+        if d >= max_dist:
+            continue
+        for v in G.neighbors[u]:
+            if v in seen:
+                continue
+            if v in targets:
+                return True
+            seen.add(v)
+            q.append((v, d + 1))
+    return False
+
 # Method 1: boundary takeover
 
 class ClusterBoundaryTakeoverSpectral(Strategy):
@@ -339,53 +369,83 @@ class ClusterTopDegreeProportionalSpectral(Strategy):
     ) -> List[List[int]]:
         return _select_seeds_50_unique(self, G, k, rng, ctx, rounds=rounds, max_attempts=10)
 
-    def select_seeds(self, G: Graph, k: int, rng: random.Random, ctx: StrategyContext) -> List[int]:
-        if k <= 0:
-            return []
-        if k > G.n:
-            raise ValueError(f"k={k} > n={G.n}")
 
-        clusters = _spectral_clusters_sorted_fiedler(
-            G,
-            rng=rng,
-            min_cluster_size=self.min_cluster_size,
-            max_clusters=k,
-            normalized=self.normalized_laplacian,
-        )
-        sizes = [len(c) for c in clusters]
-        alloc = _allocate_budget_proportional(sizes, k)
+def select_seeds(self, G: Graph, k: int, rng: random.Random, ctx: StrategyContext) -> List[int]:
+    if k <= 0:
+        return []
+    if k > G.n:
+        raise ValueError(f"k={k} > n={G.n}")
 
-        used: Set[int] = set()
-        seeds: List[int] = []
+    clusters = _spectral_clusters_sorted_fiedler(
+        G,
+        rng=rng,
+        min_cluster_size=self.min_cluster_size,
+        max_clusters=min(self.max_clusters, k) if hasattr(self, "max_clusters") else k,
+        normalized=self.normalized_laplacian,
+    )
+    sizes = [len(c) for c in clusters]
+    alloc = _allocate_budget_proportional(sizes, k)
 
-        for cluster, a in sorted(zip(clusters, alloc), key=lambda x: len(x[0]), reverse=True):
-            if a <= 0:
-                continue
+    # ---- NEW: build a global candidate list (cluster-proportional, but spacing-aware selection later)
+    candidates: List[int] = []
+    used: Set[int] = set()
 
-            # sort by degree desc
-            nodes_sorted = sorted(cluster, key=lambda u: G.degrees[u], reverse=True)
+    # Process bigger clusters first (same as before)
+    for cluster, a in sorted(zip(clusters, alloc), key=lambda x: len(x[0]), reverse=True):
+        if a <= 0:
+            continue
+        # sort by degree desc within cluster
+        nodes_sorted = sorted(cluster, key=lambda u: G.degrees[u], reverse=True)
 
+        # optional: tie-shuffle blocks of equal degree for diversity
+        if getattr(self, "tie_shuffle", True):
             i = 0
-            while a > 0 and i < len(nodes_sorted) and len(seeds) < k:
+            new_order: List[int] = []
+            while i < len(nodes_sorted):
                 deg_i = G.degrees[nodes_sorted[i]]
                 j = i
                 while j < len(nodes_sorted) and G.degrees[nodes_sorted[j]] == deg_i:
                     j += 1
-                block = [u for u in nodes_sorted[i:j] if u not in used]
-                if self.tie_shuffle:
-                    rng.shuffle(block)
-                for u in block:
-                    if a <= 0 or len(seeds) >= k:
-                        break
-                    seeds.append(u)
-                    used.add(u)
-                    a -= 1
+                block = nodes_sorted[i:j]
+                rng.shuffle(block)
+                new_order.extend(block)
                 i = j
+            nodes_sorted = new_order
 
-        # fallback fill if needed
-        if len(seeds) < k:
-            remaining = [u for u in range(G.n) if u not in used]
-            remaining.sort(key=lambda u: G.degrees[u], reverse=True)
-            seeds.extend(remaining[: (k - len(seeds))])
+        # take a *pool* rather than exact top-a so spacing constraints have room to work
+        pool_mult = getattr(self, "pool_mult", 5)  # you can set this in __init__
+        pool_size = min(len(nodes_sorted), max(a, pool_mult * a))
+        for u in nodes_sorted[:pool_size]:
+            if u not in used:
+                candidates.append(u)
+                used.add(u)
 
-        return seeds[:k]
+    # If candidates are still too few (rare), add remaining nodes by degree as backup candidates
+    if len(candidates) < k:
+        remaining = [u for u in range(G.n) if u not in used]
+        remaining.sort(key=lambda u: G.degrees[u], reverse=True)
+        candidates.extend(remaining)
+
+    # distance constraint: 2 means "not adjacent" (no edges between seeds).
+    # 3 means at least 2 hops apart, etc.
+    min_dist_start = getattr(self, "min_seed_dist", 3)  # set self.min_seed_dist = 2 or 3
+
+    seeds: List[int] = []
+    seed_set: Set[int] = set()
+
+    # We relax distance if we can't fill k (e.g., sparse graphs / too strict).
+    for dist in range(min_dist_start, -1, -1):
+        if len(seeds) >= k:
+            break
+        for u in candidates:
+            if u in seed_set:
+                continue
+            # reject if too close to existing seeds
+            if _within_distance_of_any(G, u, seed_set, dist):
+                continue
+            seeds.append(u)
+            seed_set.add(u)
+            if len(seeds) >= k:
+                break
+
+    return seeds[:k]
